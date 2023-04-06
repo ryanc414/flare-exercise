@@ -22,6 +22,7 @@ paths:
           schema:
             type: string
           description: Symbol
+          required: true
         - name: limit
           in: query
           schema:
@@ -45,6 +46,12 @@ paths:
     get:
       summary: Get votes of voter address
       parameters:
+        - name: voterAddress
+          in: path
+          schema:
+            type: string
+          description: Address of voter
+          required: true
         - name: startEpochId
           in: query
           schema:
@@ -84,36 +91,39 @@ components:
     PriceFinalized:
       type: object
       properties:
-        - name: epochID
+        epochID:
           type: string
-        - name: symbol
+        symbol:
           type: string
-	    - name: price
+        price:
           type: string
-        - name: rewardedFTSO
+        rewardedFTSO:
           type: boolean
-        - name: lowRewardPrice
+        lowRewardPrice:
           type: string
-        - name: highRewardPrice
+        highRewardPrice:
           type: string
-        - name: finalizationType
+        finalizationType:
           type: string
-        - name: timestamp
+        timestamp:
           type: string
+      required: [epochID, symbol, price, rewardedFTSO, lowRewardPrice, highRewardPrice, finalizationType, timestamp]
     PriceRevealed:
       type: object
-        - name: epochID
+      properties:
+        epochID:
           type: string
-        - name: symbol
+        symbol:
           type: string
-        - name: voter
+        voter:
           type: string
-	    - name: price
+        price:
           type: string
-        - name: timestamp
+        timestamp:
           type: string
-        - name: votePowerNat
+        votePowerNat:
           type: string
-        - name: votePowerAsset
+        votePowerAsset:
           type: string
+      required: [epochID, symbol, voter, price, timestamp, votePowerNat, votePowerAsset]
 

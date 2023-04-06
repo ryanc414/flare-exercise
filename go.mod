@@ -4,6 +4,8 @@ go 1.20
 
 require (
 	github.com/alexflint/go-arg v1.4.3
+	github.com/aws/aws-lambda-go v1.39.1
+	github.com/caarlos0/env/v6 v6.10.1
 	github.com/ethereum/go-ethereum v1.11.5
 	github.com/go-sql-driver/mysql v1.7.0
 	github.com/joho/godotenv v1.5.1
