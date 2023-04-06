@@ -1,0 +1,119 @@
+openapi: 3.0.0
+info:
+  title: REST API Interface
+  version: 1.0.0
+paths:
+  /prices-for-symbol:
+    get:
+      summary: Get prices for symbol
+      parameters:
+        - name: startEpochId
+          in: query
+          schema:
+            type: integer
+          description: Start Epoch ID
+        - name: endEpochId
+          in: query
+          schema:
+            type: integer
+          description: End Epoch ID
+        - name: symbol
+          in: query
+          schema:
+            type: string
+          description: Symbol
+        - name: limit
+          in: query
+          schema:
+            type: integer
+          description: Limit
+        - name: offset
+          in: query
+          schema:
+            type: integer
+          description: Offset
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/PriceFinalized'
+  /votes-of/{voterAddress}:
+    get:
+      summary: Get votes of voter address
+      parameters:
+        - name: startEpochId
+          in: query
+          schema:
+            type: integer
+          description: Start Epoch ID
+        - name: endEpochId
+          in: query
+          schema:
+            type: integer
+          description: End Epoch ID
+        - name: symbol
+          in: query
+          schema:
+            type: string
+          description: Symbol
+        - name: limit
+          in: query
+          schema:
+            type: integer
+          description: Limit
+        - name: offset
+          in: query
+          schema:
+            type: integer
+          description: Offset
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/PriceRevealed'
+components:
+  schemas:
+    PriceFinalized:
+      type: object
+      properties:
+        - name: epochID
+          type: string
+        - name: symbol
+          type: string
+	    - name: price
+          type: string
+        - name: rewardedFTSO
+          type: boolean
+        - name: lowRewardPrice
+          type: string
+        - name: highRewardPrice
+          type: string
+        - name: finalizationType
+          type: string
+        - name: timestamp
+          type: string
+    PriceRevealed:
+      type: object
+        - name: epochID
+          type: string
+        - name: symbol
+          type: string
+        - name: voter
+          type: string
+	    - name: price
+          type: string
+        - name: timestamp
+          type: string
+        - name: votePowerNat
+          type: string
+        - name: votePowerAsset
+          type: string
+
