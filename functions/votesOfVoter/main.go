@@ -14,6 +14,7 @@ import (
 	"github.com/aws/aws-lambda-go/events"
 	"github.com/aws/aws-lambda-go/lambda"
 	"github.com/caarlos0/env/v6"
+	"github.com/ethereum/go-ethereum/common"
 	"github.com/pkg/errors"
 	"github.com/rs/zerolog/log"
 )
@@ -72,12 +73,12 @@ type handler struct {
 func (h *handler) handle(
 	ctx context.Context, req *events.APIGatewayProxyRequest,
 ) (*events.APIGatewayProxyResponse, error) {
-	pricesReq, err := parseRequest(req)
+	votesReq, err := parseRequest(req)
 	if err != nil {
 		return &events.APIGatewayProxyResponse{StatusCode: http.StatusBadRequest}, nil
 	}
 
-	res, err := h.pricesForSymbol(ctx, pricesReq)
+	res, err := h.votesForVoter(ctx, votesReq)
 	if err != nil {
 		log.Error().Err(err).Msg("error")
 		return &events.APIGatewayProxyResponse{
@@ -90,11 +91,15 @@ func (h *handler) handle(
 
 var errBadRequest = errors.New("bad request")
 
-func parseRequest(req *events.APIGatewayProxyRequest) (*PricesRequest, error) {
-	pricesReq := &PricesRequest{
+func parseRequest(req *events.APIGatewayProxyRequest) (*VotesRequest, error) {
+	votesReq := &VotesRequest{
 		Symbol: req.QueryStringParameters["symbol"],
+		Voter:  common.HexToAddress(req.PathParameters["voterAddress"]),
 	}
-	if pricesReq.Symbol == "" {
+	if votesReq.Symbol == "" {
+		return nil, errBadRequest
+	}
+	if votesReq.Voter == (common.Address{}) {
 		return nil, errBadRequest
 	}
 
@@ -104,7 +109,7 @@ func parseRequest(req *events.APIGatewayProxyRequest) (*PricesRequest, error) {
 			return nil, err
 		}
 
-		pricesReq.StartEpochID = startEpochID
+		votesReq.StartEpochID = startEpochID
 	}
 
 	if endEpochIDRaw := req.QueryStringParameters["endEpochID"]; endEpochIDRaw != "" {
@@ -113,7 +118,7 @@ func parseRequest(req *events.APIGatewayProxyRequest) (*PricesRequest, error) {
 			return nil, err
 		}
 
-		pricesReq.EndEpochID = endEpochID
+		votesReq.EndEpochID = endEpochID
 	}
 
 	if limitRaw := req.QueryStringParameters["limit"]; limitRaw != "" {
@@ -126,7 +131,7 @@ func parseRequest(req *events.APIGatewayProxyRequest) (*PricesRequest, error) {
 			return nil, errBadRequest
 		}
 
-		pricesReq.Limit = int(limit)
+		votesReq.Limit = int(limit)
 	}
 
 	if offsetRaw := req.QueryStringParameters["offset"]; offsetRaw != "" {
@@ -135,10 +140,10 @@ func parseRequest(req *events.APIGatewayProxyRequest) (*PricesRequest, error) {
 			return nil, err
 		}
 
-		pricesReq.Offset = int(offset)
+		votesReq.Offset = int(offset)
 	}
 
-	return pricesReq, nil
+	return votesReq, nil
 }
 
 func parseBigInt(raw string) (*big.Int, error) {
@@ -150,29 +155,30 @@ func parseBigInt(raw string) (*big.Int, error) {
 	return res, nil
 }
 
-type PricesRequest struct {
+type VotesRequest struct {
 	StartEpochID *big.Int
 	EndEpochID   *big.Int
 	Symbol       string
 	Limit        int
 	Offset       int
+	Voter        common.Address
 }
 
-func (h *handler) pricesForSymbol(
-	ctx context.Context, pricesReq *PricesRequest,
+func (h *handler) votesForVoter(
+	ctx context.Context, votesReq *VotesRequest,
 ) (*events.APIGatewayProxyResponse, error) {
-	q := buildQuery(pricesReq)
+	q := buildQuery(votesReq)
 	log.Info().Str("query", q).Msg("built query")
 
-	rows, err := h.db.QueryContext(ctx, q, pricesReq.Symbol)
+	rows, err := h.db.QueryContext(ctx, q, votesReq.Voter.String())
 	if err != nil {
 		return nil, err
 	}
 
-	var results []PriceFinalized
+	var results []PriceRevealed
 	for rows.Next() {
-		var pf PriceFinalized
-		err := rows.Scan(&pf.EpochID, &pf.Price, &pf.RewardedFTSO, &pf.LowRewardPrice, &pf.HighRewardPrice, &pf.FinalizationType, &pf.Timestamp, &pf.Symbol)
+		var pf PriceRevealed
+		err := rows.Scan(&pf.EpochID, &pf.Voter, &pf.Price, &pf.Timestamp, &pf.VotePowerNat, &pf.VotePowerAsset, &pf.Symbol)
 		if err != nil {
 			return nil, err
 		}
@@ -191,35 +197,38 @@ func (h *handler) pricesForSymbol(
 	}, nil
 }
 
-type PriceFinalized struct {
-	EpochID          string `json:"epochID"`
-	Price            string `json:"price"`
-	RewardedFTSO     bool   `json:"rewardedFTSO"`
-	LowRewardPrice   string `json:"lowRewardPrice"`
-	HighRewardPrice  string `json:"highRewardPrice"`
-	FinalizationType uint8  `json:"FinalizationType"`
-	Timestamp        string `json:"Timestamp"`
-	Symbol           string `json:"symbol"`
+type PriceRevealed struct {
+	EpochID        string `json:"epochID"`
+	Voter          string `json:"voter"`
+	Price          string `json:"price"`
+	Timestamp      string `json:"Timestamp"`
+	VotePowerNat   string `json:"votePowerNat"`
+	VotePowerAsset string `json:"votePowerAsset"`
+	Symbol         string `json:"symbol"`
 }
 
-func buildQuery(pricesReq *PricesRequest) string {
+func buildQuery(votesReq *VotesRequest) string {
 	var b strings.Builder
-	b.WriteString("SELECT (EpochID, Price, RewardedFTSO, LowRewardPrice, HighRewardPrice, FinalizationType, Timestamp, Symbol) FROM PriceFinalized WHERE Symbol=? ORDER BY EpochID ASC")
+	b.WriteString("SELECT (EpochID, Voter, Price, Timestamp, VotePowerNat, VotePowerAsset, Symbol) FROM PriceRevealed WHERE Voter=? ORDER BY EpochID ASC")
 
-	if pricesReq.StartEpochID != nil {
-		b.WriteString(fmt.Sprintf("WHERE EpochID>=%s", pricesReq.StartEpochID))
+	if votesReq.Symbol != "" {
+		b.WriteString(fmt.Sprintf("WHERE Symbol=%s", votesReq.Symbol))
 	}
 
-	if pricesReq.EndEpochID != nil {
-		b.WriteString(fmt.Sprintf("WHERE EpochID<%s", pricesReq.EndEpochID))
+	if votesReq.StartEpochID != nil {
+		b.WriteString(fmt.Sprintf("WHERE EpochID>=%s", votesReq.StartEpochID))
 	}
 
-	if pricesReq.Limit != 0 {
-		b.WriteString(fmt.Sprintf("LIMIT %d", pricesReq.Limit))
+	if votesReq.EndEpochID != nil {
+		b.WriteString(fmt.Sprintf("WHERE EpochID<%s", votesReq.EndEpochID))
 	}
 
-	if pricesReq.Offset != 0 {
-		b.WriteString(fmt.Sprintf("OFFSET %d", pricesReq.Offset))
+	if votesReq.Limit != 0 {
+		b.WriteString(fmt.Sprintf("LIMIT %d", votesReq.Limit))
+	}
+
+	if votesReq.Offset != 0 {
+		b.WriteString(fmt.Sprintf("OFFSET %d", votesReq.Offset))
 	}
 
 	return b.String()
