@@ -3,9 +3,12 @@ package main
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
+	"fmt"
 	"math/big"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/aws/aws-lambda-go/events"
@@ -119,6 +122,10 @@ func parseRequest(req *events.APIGatewayProxyRequest) (*PricesRequest, error) {
 			return nil, err
 		}
 
+		if limit <= 0 || limit > 1000 {
+			return nil, errBadRequest
+		}
+
 		pricesReq.Limit = int(limit)
 	}
 
@@ -151,6 +158,68 @@ type PricesRequest struct {
 	Offset       int
 }
 
-func (h *handler) pricesForSymbol(ctx context.Context, pricesReq *PricesRequest) (*events.APIGatewayProxyResponse, error) {
-	return nil, errors.New("")
+func (h *handler) pricesForSymbol(
+	ctx context.Context, pricesReq *PricesRequest,
+) (*events.APIGatewayProxyResponse, error) {
+	q := buildQuery(pricesReq)
+	log.Info().Str("query", q).Msg("built query")
+
+	rows, err := h.db.QueryContext(ctx, q, pricesReq.Symbol)
+	if err != nil {
+		return nil, err
+	}
+
+	var results []PriceFinalized
+	for rows.Next() {
+		var pf PriceFinalized
+		err := rows.Scan(&pf.EpochID, &pf.Voter, &pf.Price, &pf.Timestamp, &pf.VotePowerNat, &pf.VotePowerAsset, &pf.Symbol)
+		if err != nil {
+			return nil, err
+		}
+
+		results = append(results, pf)
+	}
+
+	resultsData, err := json.Marshal(results)
+	if err != nil {
+		return nil, err
+	}
+
+	return &events.APIGatewayProxyResponse{
+		StatusCode: http.StatusOK,
+		Body:       string(resultsData),
+	}, nil
+}
+
+type PriceFinalized struct {
+	EpochID        string `json:"epochID"`
+	Voter          string `json:"voter"`
+	Price          string `json:"price"`
+	Timestamp      string `json:"Timestamp"`
+	VotePowerNat   string `json:"votePowerNat"`
+	VotePowerAsset string `json:"votePowerAsset"`
+	Symbol         string `json:"symbol"`
+}
+
+func buildQuery(pricesReq *PricesRequest) string {
+	var b strings.Builder
+	b.WriteString("SELECT (EpochID, Voter, Price, Timestamp, VotePowerNat, VotePowerAsset, Symbol) FROM PriceFinalized WHERE Symbol=? ORDER BY EpochID")
+
+	if pricesReq.StartEpochID != nil {
+		b.WriteString(fmt.Sprintf("WHERE EpochID>=%s", pricesReq.StartEpochID))
+	}
+
+	if pricesReq.EndEpochID != nil {
+		b.WriteString(fmt.Sprintf("WHERE EpochID<%s", pricesReq.EndEpochID))
+	}
+
+	if pricesReq.Limit != 0 {
+		b.WriteString(fmt.Sprintf("LIMIT %d", pricesReq.Limit))
+	}
+
+	if pricesReq.Offset != 0 {
+		b.WriteString(fmt.Sprintf("OFFSET %d", pricesReq.Offset))
+	}
+
+	return b.String()
 }
