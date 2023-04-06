@@ -15,6 +15,7 @@ import (
 	"github.com/aws/aws-lambda-go/lambda"
 	"github.com/caarlos0/env/v6"
 	"github.com/ethereum/go-ethereum/common"
+	_ "github.com/go-sql-driver/mysql"
 	"github.com/pkg/errors"
 	"github.com/rs/zerolog/log"
 )
@@ -95,9 +96,6 @@ func parseRequest(req *events.APIGatewayProxyRequest) (*VotesRequest, error) {
 	votesReq := &VotesRequest{
 		Symbol: req.QueryStringParameters["symbol"],
 		Voter:  common.HexToAddress(req.PathParameters["voterAddress"]),
-	}
-	if votesReq.Symbol == "" {
-		return nil, errBadRequest
 	}
 	if votesReq.Voter == (common.Address{}) {
 		return nil, errBadRequest
@@ -209,26 +207,28 @@ type PriceRevealed struct {
 
 func buildQuery(votesReq *VotesRequest) string {
 	var b strings.Builder
-	b.WriteString("SELECT (EpochID, Voter, Price, Timestamp, VotePowerNat, VotePowerAsset, Symbol) FROM PriceRevealed WHERE Voter=? ORDER BY EpochID ASC")
+	b.WriteString("SELECT EpochID, Voter, Price, Timestamp, VotePowerNat, VotePowerAsset, Symbol FROM PriceRevealed WHERE Voter=?")
 
 	if votesReq.Symbol != "" {
-		b.WriteString(fmt.Sprintf("WHERE Symbol=%s", votesReq.Symbol))
+		b.WriteString(fmt.Sprintf(" AND Symbol='%s'", votesReq.Symbol))
 	}
 
 	if votesReq.StartEpochID != nil {
-		b.WriteString(fmt.Sprintf("WHERE EpochID>=%s", votesReq.StartEpochID))
+		b.WriteString(fmt.Sprintf(" AND EpochID>=%s", votesReq.StartEpochID))
 	}
 
 	if votesReq.EndEpochID != nil {
-		b.WriteString(fmt.Sprintf("WHERE EpochID<%s", votesReq.EndEpochID))
+		b.WriteString(fmt.Sprintf(" AND EpochID<%s", votesReq.EndEpochID))
 	}
 
+	b.WriteString(" ORDER BY EpochID ASC")
+
 	if votesReq.Limit != 0 {
-		b.WriteString(fmt.Sprintf("LIMIT %d", votesReq.Limit))
+		b.WriteString(fmt.Sprintf(" LIMIT %d", votesReq.Limit))
 	}
 
 	if votesReq.Offset != 0 {
-		b.WriteString(fmt.Sprintf("OFFSET %d", votesReq.Offset))
+		b.WriteString(fmt.Sprintf(" OFFSET %d", votesReq.Offset))
 	}
 
 	return b.String()

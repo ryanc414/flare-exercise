@@ -14,6 +14,7 @@ import (
 	"github.com/aws/aws-lambda-go/events"
 	"github.com/aws/aws-lambda-go/lambda"
 	"github.com/caarlos0/env/v6"
+	_ "github.com/go-sql-driver/mysql"
 	"github.com/pkg/errors"
 	"github.com/rs/zerolog/log"
 )
@@ -204,22 +205,24 @@ type PriceFinalized struct {
 
 func buildQuery(pricesReq *PricesRequest) string {
 	var b strings.Builder
-	b.WriteString("SELECT (EpochID, Price, RewardedFTSO, LowRewardPrice, HighRewardPrice, FinalizationType, Timestamp, Symbol) FROM PriceFinalized WHERE Symbol=? ORDER BY EpochID ASC")
+	b.WriteString("SELECT EpochID, Price, RewardedFTSO, LowRewardPrice, HighRewardPrice, FinalizationType, Timestamp, Symbol FROM PriceFinalized WHERE Symbol=?")
 
 	if pricesReq.StartEpochID != nil {
-		b.WriteString(fmt.Sprintf("WHERE EpochID>=%s", pricesReq.StartEpochID))
+		b.WriteString(fmt.Sprintf(" AND EpochID>=%s", pricesReq.StartEpochID))
 	}
 
 	if pricesReq.EndEpochID != nil {
-		b.WriteString(fmt.Sprintf("WHERE EpochID<%s", pricesReq.EndEpochID))
+		b.WriteString(fmt.Sprintf(" AND EpochID<%s", pricesReq.EndEpochID))
 	}
 
+	b.WriteString(" ORDER BY EpochID ASC")
+
 	if pricesReq.Limit != 0 {
-		b.WriteString(fmt.Sprintf("LIMIT %d", pricesReq.Limit))
+		b.WriteString(fmt.Sprintf(" LIMIT %d", pricesReq.Limit))
 	}
 
 	if pricesReq.Offset != 0 {
-		b.WriteString(fmt.Sprintf("OFFSET %d", pricesReq.Offset))
+		b.WriteString(fmt.Sprintf(" OFFSET %d", pricesReq.Offset))
 	}
 
 	return b.String()
