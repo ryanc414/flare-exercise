@@ -232,6 +232,8 @@ func (p *eventPoller) pollEvents(ctx context.Context) error {
 
 	log.Info().Int("PR", len(events.PriceRevealed)).Int("PF", len(events.PriceFinalized)).Msg("parsed events")
 
+	// TODO: cache stored events in-memory to avoid redundant extra writes.
+
 	return p.storeEvents(ctx, events)
 }
 
@@ -281,6 +283,8 @@ func (p *eventPoller) parseEvents(logs []types.Log) (*Events, error) {
 }
 
 func (p *eventPoller) storeEvents(ctx context.Context, events *Events) error {
+	// TODO: store events in parallel.
+
 	for _, event := range events.PriceRevealed {
 		if err := p.storePriceRevealed(ctx, event); err != nil {
 			return err
